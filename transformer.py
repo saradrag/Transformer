@@ -1,15 +1,10 @@
 import torch
 from torch import nn
 import numpy as np
+from parameters import N_WORDS_ENCODER, N_WORDS_DECODER, D_MODEL, N, H
 
-SENTENCE_LENGTH = 10
-D_MODEL = 64
-N = 5  # number of layers multi head attentions
-H = 4  # number of parallel multi head attentions
 D_K = D_Q = D_MODEL // H
 D_V = D_MODEL // H
-N_WORDS_ENCODER = 1000
-N_WORDS_DECODER = 1000
 
 
 # Scaled dot-product layer

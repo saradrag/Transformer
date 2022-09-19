@@ -1,8 +1,6 @@
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-
-BATCH_SIZE = 64
-N_WORDS_DECODER = 1000
+from parameters import BATCH_SIZE, N_WORDS_DECODER
 
 
 class ArrayDataset(Dataset):
