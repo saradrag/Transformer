@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import numpy as np
 from parameters import N_WORDS_ENCODER, N_WORDS_DECODER, D_MODEL, N, H
+import math
 
 D_K = D_Q = D_MODEL // H
 D_V = D_MODEL // H
@@ -89,14 +90,31 @@ class DecoderBlock(nn.Module):
         z = self.normalization(z)
         return z
 
+class PositionalEncoding(nn.Module):
+
+    def __init__(self, max_len=5000):
+        super(PositionalEncoding, self).__init__()
+
+        self.pe = torch.zeros(max_len, D_MODEL)
+        position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, D_MODEL, 2).float() * (-math.log(10000.0) / D_MODEL))
+        self.pe[:, 0::2] = torch.sin(position * div_term)
+        self.pe[:, 1::2] = torch.cos(position * div_term)
+
+    def forward(self, x):
+        return x + self.pe[:x.size(1), :]
+
+
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings=N_WORDS_ENCODER, embedding_dim=D_MODEL)
+        self.positionalEnc = PositionalEncoding()
         self.encoderBlocks = nn.ModuleList([EncoderBlock() for _ in range(N)])
 
     def forward(self, inp):
         out = self.embedding(inp)
+        out = self.positionalEnc(out)
         for eb in self.encoderBlocks:
             out = eb(out)
         return out
@@ -105,11 +123,13 @@ class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
         self.embedding = nn.Embedding(num_embeddings=N_WORDS_DECODER+1, embedding_dim=D_MODEL, padding_idx=N_WORDS_DECODER)
+        self.positionalEnc = PositionalEncoding()
         self.decoderBlocks = nn.ModuleList([DecoderBlock() for _ in range(N)])
         self.linear = nn.Linear(D_MODEL, N_WORDS_DECODER)
 
     def forward(self, inp, encoder_output):
         out = self.embedding(inp)
+        out = self.positionalEnc(out)
         for db in self.decoderBlocks:
             out = db(out, encoder_output)
         out = self.linear(out)
