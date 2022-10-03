@@ -9,6 +9,7 @@ D_K = D_Q = D_MODEL // H
 D_V = D_MODEL // H
 N_WORDS_ENCODER = 1000
 N_WORDS_DECODER = 1000
+P_DROPOUT = 0.1
 
 # dataloader parameters
 BATCH_SIZE = 64

@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
-from parameters import N_WORDS_ENCODER, N_WORDS_DECODER, D_MODEL, N, H
+from parameters import N_WORDS_ENCODER, N_WORDS_DECODER, D_MODEL, N, H, P_DROPOUT
 import math
 
 D_K = D_Q = D_MODEL // H
@@ -14,7 +14,7 @@ def scaled_dot_product(queries, keys, values, mask=False):
     attention /= np.sqrt(D_K)
     if mask:
         attention = torch.tril(attention)
-    attention = nn.functional.softmax(attention, dim=-1)  # check if rows sum up to 1
+    attention = nn.functional.softmax(attention, dim=-1)
     new_values = attention @ values
     return new_values
 
@@ -29,7 +29,7 @@ class MultiHeadAttention(nn.Module):
         self.linear = nn.Linear(D_V * H, D_MODEL)
 
     def forward(self, xv, xk, xq):
-        v = self.V(xv).view(xv.shape[0], xv.shape[1], H, D_V)         # (batch_size, sent_len, d_q * h)
+        v = self.V(xv).view(xv.shape[0], xv.shape[1], H, D_V)
         k = self.K(xk).view(xk.shape[0], xk.shape[1], H, D_K)
         q = self.Q(xq).view(xq.shape[0], xq.shape[1], H, D_Q)
         v = torch.transpose(v, -2, -3)
@@ -50,15 +50,16 @@ class EncoderBlock(nn.Module):
         self.linear1 = nn.Linear(D_MODEL, D_MODEL * 4)
         self.activation = nn.ReLU()
         self.linear2 = nn.Linear(D_MODEL * 4, D_MODEL)
+        self.dropout1 = nn.Dropout(P_DROPOUT)
+        self.dropout2 = nn.Dropout(P_DROPOUT)
 
     def forward(self, x):
-        y = self.MHA(x, x, x)
-        y += x
+        y = x + self.dropout1(self.MHA(x, x, x))
         y = self.normalization(y)
         z = self.linear1(y)
         z = self.activation(z)
         z = self.linear2(z)
-        z += y
+        z = y + self.dropout2(z)
         z = self.normalization(z)
         return z
 
@@ -73,22 +74,24 @@ class DecoderBlock(nn.Module):
         self.linear1 = nn.Linear(D_MODEL, D_MODEL * 4)
         self.linear2 = nn.Linear(D_MODEL * 4, D_MODEL)
         self.activation = nn.ReLU()
+        self.dropout1 = nn.Dropout(P_DROPOUT)
+        self.dropout2 = nn.Dropout(P_DROPOUT)
+        self.dropout3 = nn.Dropout(P_DROPOUT)
 
     # x - input from previous decoder layer
     # y - output from the encoder layer
     def forward(self, x, y):
-        w = self.mmha(x, x, x)
-        w += x
-        w = self.normalization(w)
-        f = self.mha(y, y, w)
-        f += w
-        f = self.normalization(f)
-        z = self.linear1(w)
+        x = x + self.dropout1(self.mmha(x, x, x))
+        x = self.normalization(x)
+        x = x + self.dropout2(self.mha(y, y, x))
+        x = self.normalization(x)
+        z = self.linear1(x)
         z = self.activation(z)
         z = self.linear2(z)
-        z += f
+        z = x + self.dropout3(z)
         z = self.normalization(z)
         return z
+
 
 class PositionalEncoding(nn.Module):
 
@@ -100,9 +103,10 @@ class PositionalEncoding(nn.Module):
         div_term = torch.exp(torch.arange(0, D_MODEL, 2).float() * (-math.log(10000.0) / D_MODEL))
         self.pe[:, 0::2] = torch.sin(position * div_term)
         self.pe[:, 1::2] = torch.cos(position * div_term)
+        self.dropout = nn.Dropout(P_DROPOUT)
 
     def forward(self, x):
-        return x + self.pe[:x.size(1), :]
+        return self.dropout(x + self.pe[:x.size(1), :])
 
 
 class Encoder(nn.Module):
@@ -119,10 +123,11 @@ class Encoder(nn.Module):
             out = eb(out)
         return out
 
+
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.embedding = nn.Embedding(num_embeddings=N_WORDS_DECODER+1, embedding_dim=D_MODEL, padding_idx=N_WORDS_DECODER)
+        self.embedding = nn.Embedding(num_embeddings=N_WORDS_DECODER + 1, embedding_dim=D_MODEL, padding_idx=N_WORDS_DECODER)
         self.positionalEnc = PositionalEncoding()
         self.decoderBlocks = nn.ModuleList([DecoderBlock() for _ in range(N)])
         self.linear = nn.Linear(D_MODEL, N_WORDS_DECODER)
@@ -147,18 +152,3 @@ class Transformer(nn.Module):
         encoder_output = self.encoder(encoder_input)
         output = self.decoder(decoder_input, encoder_output)
         return output
-
-
-"""model = Transformer()
-x = torch.tensor([[1,2,3],[0,4,2],[2,1,4],[1,2,3]])
-print(x.shape)
-#y = torch.tensor([[1,2,3],[0,4,2],[2,1,4],[1,2,3]])
-y = torch.tensor([[1],[0],[2],[1]])
-print(y.shape)
-z = model(x, y)
-print(z)"""
-
-"""x1 = torch.rand(1, 3, 4)
-model = nn.Linear(4, 5)
-print(model(x1))
-x3 = torch.rand(3, 1)"""
