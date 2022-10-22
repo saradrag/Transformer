@@ -1,26 +1,29 @@
 import numpy as np
+import pandas as pd
+from os import walk
+import torch
 from torch.utils.data import Dataset, DataLoader
-from parameters import BATCH_SIZE, N_WORDS_DECODER
+from parameters import BATCH_SIZE
 
 
-class ArrayDataset(Dataset):
-    def __init__(self, data_path, labels_path):
-        self.data = np.loadtxt(data_path, dtype='i')
-        self.labels = np.loadtxt(labels_path, dtype='i')
+class SalesDataset(Dataset):
+    def __init__(self):
+        super(SalesDataset, self).__init__()
+        for _,_,data in walk('data/train'):
+            self.data_csv = data
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data_csv)*(1684-28)
 
     def __getitem__(self, item):
-        labels = self.labels[item]
-        shifted_labels = np.insert(labels, 0, N_WORDS_DECODER)[:-1]
-        return self.data[item], shifted_labels, labels
+        n, i = divmod(item, (1684-28))
+        df = pd.read_csv('data/train/'+self.data_csv[n])
+        encoder_input = torch.tensor(df.iloc[i:i+15].values.astype(np.float32))
+        decoder_input = torch.tensor(df.iloc[i+14:i+29].values.astype(np.float32))
+        decoder_output = torch.tensor(df.iloc[i+14:i+29, -33:].values.astype(np.float32))
+        return encoder_input, decoder_input, decoder_output
 
 
-training_set = ArrayDataset('data/training_arrays.txt', 'data/training_labels.txt')
-validation_set = ArrayDataset('data/validation_arrays.txt', 'data/validation_labels.txt')
-test_set = ArrayDataset('data/test_arrays.txt', 'data/test_labels.txt')
+training_set = SalesDataset()
 
 training_loader = DataLoader(training_set, batch_size=BATCH_SIZE, shuffle=True)
-validation_loader = DataLoader(validation_set, batch_size=BATCH_SIZE, shuffle=True)
-test_loader = DataLoader(test_set, batch_size=BATCH_SIZE)

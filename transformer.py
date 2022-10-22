@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import numpy as np
-from parameters import N_WORDS_ENCODER, N_WORDS_DECODER, D_MODEL, N, H, P_DROPOUT
+from parameters import N_DECODER_OUTPUT, D_MODEL, N, H, P_DROPOUT
 import math
 
 D_K = D_Q = D_MODEL // H
@@ -112,13 +112,11 @@ class PositionalEncoding(nn.Module):
 class Encoder(nn.Module):
     def __init__(self):
         super(Encoder, self).__init__()
-        self.embedding = nn.Embedding(num_embeddings=N_WORDS_ENCODER, embedding_dim=D_MODEL)
         self.positionalEnc = PositionalEncoding()
         self.encoderBlocks = nn.ModuleList([EncoderBlock() for _ in range(N)])
 
     def forward(self, inp):
-        out = self.embedding(inp)
-        out = self.positionalEnc(out)
+        out = self.positionalEnc(inp)
         for eb in self.encoderBlocks:
             out = eb(out)
         return out
@@ -127,14 +125,12 @@ class Encoder(nn.Module):
 class Decoder(nn.Module):
     def __init__(self):
         super(Decoder, self).__init__()
-        self.embedding = nn.Embedding(num_embeddings=N_WORDS_DECODER + 1, embedding_dim=D_MODEL, padding_idx=N_WORDS_DECODER)
         self.positionalEnc = PositionalEncoding()
         self.decoderBlocks = nn.ModuleList([DecoderBlock() for _ in range(N)])
-        self.linear = nn.Linear(D_MODEL, N_WORDS_DECODER)
+        self.linear = nn.Linear(D_MODEL, N_DECODER_OUTPUT)
 
     def forward(self, inp, encoder_output):
-        out = self.embedding(inp)
-        out = self.positionalEnc(out)
+        out = self.positionalEnc(inp)
         for db in self.decoderBlocks:
             out = db(out, encoder_output)
         out = self.linear(out)
@@ -142,13 +138,28 @@ class Decoder(nn.Module):
         return out
 
 
+class Encoding(nn.Module):
+    def __init__(self):
+        super(Encoding, self).__init__()
+        self.linear1 = nn.Linear(74, 256)
+        self.activation = nn.Sigmoid()
+        self.dropout = nn.Dropout(p=0.5)
+        self.linear2 = nn.Linear(256, D_MODEL)
+
+    def forward(self, inp):
+        x = self.linear1(inp)
+        x = self.dropout(self.activation(x))
+        return self.linear2(x)
+
+
 class Transformer(nn.Module):
     def __init__(self):
         super(Transformer, self).__init__()
+        self.encoding = Encoding()
         self.encoder = Encoder()
         self.decoder = Decoder()
 
     def forward(self, encoder_input, decoder_input):
-        encoder_output = self.encoder(encoder_input)
-        output = self.decoder(decoder_input, encoder_output)
+        encoder_output = self.encoder(self.encoding(encoder_input))
+        output = self.decoder(self.encoding(decoder_input), encoder_output)
         return output
